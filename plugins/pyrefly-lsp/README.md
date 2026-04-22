@@ -35,13 +35,18 @@ Once installed, Claude Code will launch `pyrefly lsp` on stdio for any `.py` or
 
 ## How it works
 
-The plugin is a single marketplace entry that registers an LSP server:
+The plugin registers an LSP server that points at a small shim script
+bundled with the plugin ([`bin/pyrefly-lsp`](./bin/pyrefly-lsp)). The shim:
 
-- `command`: `pyrefly`
-- `args`: `["lsp"]`
-- Handles: `.py`, `.pyi`
+1. Checks whether `pyrefly` is on `PATH`.
+2. If missing, exits with a clear stderr message listing install commands —
+   so Claude Code's LSP error surface tells you the fix rather than
+   "command not found".
+3. Otherwise `exec`s `pyrefly lsp`.
 
 Pyrefly speaks LSP on stdio by default — there is no `--stdio` flag to pass.
+
+Handles: `.py`, `.pyi`.
 
 ## License
 

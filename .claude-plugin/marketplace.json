@@ -12,8 +12,8 @@
       "strict": false,
       "lspServers": {
         "pyrefly": {
-          "command": "pyrefly",
-          "args": ["lsp"],
+          "command": "${CLAUDE_PLUGIN_ROOT}/bin/pyrefly-lsp",
+          "args": [],
           "extensionToLanguage": {
             ".py": "python",
             ".pyi": "python"

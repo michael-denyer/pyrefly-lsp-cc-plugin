@@ -16,6 +16,10 @@ Design doc: [docs/superpowers/specs/2026-04-22-pyrefly-lsp-cc-plugin-design.md](
 - [.claude-plugin/marketplace.json](./.claude-plugin/marketplace.json) —
   the only artefact CC actually reads. `plugins[0].version` is the
   authoritative version string (bumped automatically by Release Please).
+  `"strict": false` is **load-bearing**: the plugin has no `plugin.json`,
+  so the marketplace entry IS the plugin definition (including the
+  `lspServers` block). CC's default is `strict: true`, which would
+  require a `plugin.json` — do not remove the field.
 - [plugins/pyrefly-lsp/bin/pyrefly-lsp](./plugins/pyrefly-lsp/bin/pyrefly-lsp) —
   POSIX `sh` preflight shim. Checks `pyrefly` is on PATH; if not,
   prints install hints to stderr and exits 127. `exec`s `pyrefly lsp`

@@ -48,6 +48,55 @@ Pyrefly speaks LSP on stdio by default — there is no `--stdio` flag to pass.
 
 Handles: `.py`, `.pyi`.
 
+## Configuring Pyrefly (optional)
+
+Pyrefly auto-discovers config from your project root. It reads **one of**:
+
+- `pyrefly.toml` at the project root (note: no leading dot — `.pyrefly.toml`
+  is silently ignored), or
+- a `[tool.pyrefly]` table inside `pyproject.toml`
+
+### Starter snippet
+
+```toml
+[tool.pyrefly]
+project-includes = ["src", "tests"]
+python-version = "3.12"
+
+# Pyrefly has no `strict = true` flag — strictness is opt-in per error code.
+# Start at "warn" so CI stays green during adoption, then flip to the
+# default severity ("error") once the codebase is clean.
+[tool.pyrefly.errors]
+implicit-any = "warn"
+implicitly-defined-attribute = "warn"
+missing-override-decorator = "warn"
+unannotated-parameter = "warn"
+unannotated-return = "warn"
+untyped-import = "warn"
+unused-ignore = "warn"
+
+# Relax the noisy checks in tests.
+[[tool.pyrefly.sub-config]]
+matches = "tests/**"
+[tool.pyrefly.sub-config.errors]
+implicit-any = false
+unannotated-parameter = false
+unannotated-return = false
+```
+
+### Gotchas
+
+- **No `strict = true` equivalent** — enumerate codes in `[tool.pyrefly.errors]`.
+- **`project-includes` fails hard on zero matches** — delete a directory and
+  forget to update the glob, and Pyrefly refuses to start.
+- **Adopting on an existing codebase:** generate a baseline first with
+  `pyrefly check --baseline=pyrefly-baseline.json --update-baseline`, then
+  add `baseline = "pyrefly-baseline.json"` to the config. Otherwise every
+  PR gets blocked on pre-existing errors.
+
+Full option reference:
+[facebook/pyrefly configuration docs](https://pyrefly.org/en/docs/configuration/).
+
 ## License
 
 MIT. See [LICENSE](./LICENSE).

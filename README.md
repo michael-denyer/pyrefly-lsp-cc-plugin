@@ -25,6 +25,24 @@ You must install the `pyrefly` binary yourself — see the plugin
 See [docs/superpowers/specs/2026-04-22-pyrefly-lsp-cc-plugin-design.md](./docs/superpowers/specs/2026-04-22-pyrefly-lsp-cc-plugin-design.md)
 for the full design rationale.
 
+## Releases
+
+Versioning is automated via
+[Release Please](https://github.com/googleapis/release-please). Commits on
+`main` follow the [Conventional Commits](https://www.conventionalcommits.org/)
+spec:
+
+- `feat: …` → minor bump
+- `fix: …` → patch bump
+- `feat!: …` or a `BREAKING CHANGE:` footer → major bump
+- `chore: …`, `docs: …`, `ci: …` → no release
+
+Release Please watches `main` and opens a *"chore: release x.y.z"* PR that
+accumulates unreleased changes. Merging that PR tags the release, publishes
+a GitHub Release, updates [`CHANGELOG.md`](./CHANGELOG.md), and propagates
+the version into `plugins[0].version` in
+[`.claude-plugin/marketplace.json`](./.claude-plugin/marketplace.json).
+
 ## License
 
 MIT. See [LICENSE](./LICENSE).

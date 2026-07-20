@@ -7,7 +7,7 @@
     {
       "name": "pyrefly-lsp",
       "description": "Python language server (Pyrefly) — fast type checking and code intelligence",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Michael Denyer"
       },

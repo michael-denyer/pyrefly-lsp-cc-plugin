@@ -1,9 +1,19 @@
 #!/usr/bin/env sh
-# Launches `pyrefly lsp`. If `pyrefly` isn't on PATH, exits with a clear
-# install hint so Claude Code surfaces the fix rather than a cryptic
-# "command not found" error.
+# Launches `pyrefly lsp` with a memory cap. If `pyrefly` isn't on PATH, exits
+# with a clear install hint so Claude Code surfaces the fix rather than a
+# cryptic "command not found" error.
+#
+# Pyrefly has known unbounded-memory-growth issues on long-lived servers
+# (facebook/pyrefly#1092, #2302, #2970). A restart is a clean fix: the LSP
+# client respawns the server and re-initializes on the next request. The
+# wrapper cannot restart pyrefly itself — the client owns the `initialize`
+# handshake — so on breach it kills the child and exits, letting the client
+# respawn.
+#
+#   PYREFLY_LSP_MAX_RSS_KB   RSS cap in KB (default 768000 = 750 MiB; 0 disables)
+#   PYREFLY_LSP_POLL_SECS    seconds between RSS checks (default 30)
 
-set -eu
+set -u
 
 if ! command -v pyrefly >/dev/null 2>&1; then
   printf 'pyrefly not found on PATH.\n' >&2
@@ -14,4 +24,36 @@ if ! command -v pyrefly >/dev/null 2>&1; then
   exit 127
 fi
 
-exec pyrefly lsp "$@"
+CAP_KB=${PYREFLY_LSP_MAX_RSS_KB:-768000}
+POLL_SECS=${PYREFLY_LSP_POLL_SECS:-30}
+
+if [ "$CAP_KB" -eq 0 ]; then
+  exec pyrefly lsp "$@"
+fi
+
+# The explicit <&0 is required: POSIX redirects a background job's stdin to
+# /dev/null, which would make pyrefly see EOF and exit immediately.
+pyrefly lsp "$@" <&0 &
+child=$!
+
+(
+  while kill -0 "$child" 2>/dev/null; do
+    sleep "$POLL_SECS"
+    rss=$(ps -o rss= -p "$child" 2>/dev/null | tr -d ' ')
+    [ -n "$rss" ] || exit 0
+    if [ "$rss" -gt "$CAP_KB" ]; then
+      printf 'pyrefly-lsp: RSS %sKB exceeded cap %sKB, killing server for client respawn\n' \
+        "$rss" "$CAP_KB" >&2
+      kill "$child" 2>/dev/null
+      exit 0
+    fi
+  done
+) &
+watcher=$!
+
+trap 'kill "$child" "$watcher" 2>/dev/null' TERM INT HUP
+
+wait "$child"
+status=$?
+kill "$watcher" 2>/dev/null
+exit "$status"

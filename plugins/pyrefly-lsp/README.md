@@ -42,11 +42,36 @@ bundled with the plugin ([`bin/pyrefly-lsp`](./bin/pyrefly-lsp)). The shim:
 2. If missing, exits with a clear stderr message listing install commands —
    so Claude Code's LSP error surface tells you the fix rather than
    "command not found".
-3. Otherwise `exec`s `pyrefly lsp`.
+3. Otherwise launches `pyrefly lsp` and watches its memory (see below).
 
 Pyrefly speaks LSP on stdio by default — there is no `--stdio` flag to pass.
 
 Handles: `.py`, `.pyi`.
+
+## Memory cap
+
+Pyrefly has known unbounded-memory-growth issues on long-lived servers
+([facebook/pyrefly#1092](https://github.com/facebook/pyrefly/issues/1092),
+[#2302](https://github.com/facebook/pyrefly/issues/2302),
+[#2970](https://github.com/facebook/pyrefly/issues/2970)) — a server left
+running for days can climb from a few hundred MB to multiple GB. The shim
+polls the server's RSS every 30 seconds and kills it when it crosses
+**750 MiB** (default). Claude Code respawns the server and re-initializes on
+the next LSP request, so the only cost is a fresh index.
+
+The shim cannot restart pyrefly itself — the LSP client owns the
+`initialize` handshake — which is why it exits and lets the client respawn.
+
+Tune via environment variables:
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `PYREFLY_LSP_MAX_RSS_KB` | `768000` (750 MiB) | RSS cap in KB; `0` disables the cap entirely |
+| `PYREFLY_LSP_POLL_SECS` | `30` | Seconds between RSS checks |
+
+When the cap fires, the shim logs one line to stderr
+(`pyrefly-lsp: RSS ...KB exceeded cap ...KB`), visible in Claude Code's LSP
+logs.
 
 ## Configuring Pyrefly (optional)
 

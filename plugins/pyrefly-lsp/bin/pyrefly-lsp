@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
-# Launches `pyrefly lsp` with a memory cap. If `pyrefly` isn't on PATH, exits
-# with a clear install hint so Claude Code surfaces the fix rather than a
-# cryptic "command not found" error.
+# Launches `pyrefly lsp` with a memory cap and an idle kill. If `pyrefly`
+# isn't on PATH, exits with a clear install hint so Claude Code surfaces the
+# fix rather than a cryptic "command not found" error.
 #
 # Pyrefly has known unbounded-memory-growth issues on long-lived servers
 # (facebook/pyrefly#1092, #2302, #2970). A restart is a clean fix: the LSP
@@ -10,8 +10,14 @@
 # handshake — so on breach it kills the child and exits, letting the client
 # respawn.
 #
-#   PYREFLY_LSP_MAX_RSS_KB   RSS cap in KB (default 768000 = 750 MiB; 0 disables)
-#   PYREFLY_LSP_POLL_SECS    seconds between RSS checks (default 30)
+# Idle detection uses the child's accumulated CPU time as a proxy: the shim
+# does not sit in the stdio stream, but a server nobody queries burns no CPU,
+# so an unchanged CPU counter across polls means the server is unused.
+#
+#   PYREFLY_LSP_MAX_RSS_KB    RSS cap in KB (default 768000 = 750 MiB; 0 disables)
+#   PYREFLY_LSP_POLL_SECS     seconds between checks (default 900 = 15 min)
+#   PYREFLY_LSP_IDLE_SECS     kill after this long with no CPU activity
+#                             (default 86400 = 24 h; 0 disables)
 
 set -u
 
@@ -25,9 +31,10 @@ if ! command -v pyrefly >/dev/null 2>&1; then
 fi
 
 CAP_KB=${PYREFLY_LSP_MAX_RSS_KB:-768000}
-POLL_SECS=${PYREFLY_LSP_POLL_SECS:-30}
+POLL_SECS=${PYREFLY_LSP_POLL_SECS:-900}
+IDLE_SECS=${PYREFLY_LSP_IDLE_SECS:-86400}
 
-if [ "$CAP_KB" -eq 0 ]; then
+if [ "$CAP_KB" -eq 0 ] && [ "$IDLE_SECS" -eq 0 ]; then
   exec pyrefly lsp "$@"
 fi
 
@@ -37,15 +44,31 @@ pyrefly lsp "$@" <&0 &
 child=$!
 
 (
+  last_cpu=''
+  idle=0
   while kill -0 "$child" 2>/dev/null; do
     sleep "$POLL_SECS"
     rss=$(ps -o rss= -p "$child" 2>/dev/null | tr -d ' ')
     [ -n "$rss" ] || exit 0
-    if [ "$rss" -gt "$CAP_KB" ]; then
+    if [ "$CAP_KB" -gt 0 ] && [ "$rss" -gt "$CAP_KB" ]; then
       printf 'pyrefly-lsp: RSS %sKB exceeded cap %sKB, killing server for client respawn\n' \
         "$rss" "$CAP_KB" >&2
       kill "$child" 2>/dev/null
       exit 0
+    fi
+    if [ "$IDLE_SECS" -gt 0 ]; then
+      cpu=$(ps -o time= -p "$child" 2>/dev/null | tr -d ' ')
+      if [ "$cpu" = "$last_cpu" ]; then
+        idle=$((idle + POLL_SECS))
+        if [ "$idle" -ge "$IDLE_SECS" ]; then
+          printf 'pyrefly-lsp: no CPU activity for %ss, killing idle server\n' "$idle" >&2
+          kill "$child" 2>/dev/null
+          exit 0
+        fi
+      else
+        idle=0
+        last_cpu=$cpu
+      fi
     fi
   done
 ) &

@@ -55,9 +55,14 @@ Pyrefly has known unbounded-memory-growth issues on long-lived servers
 [#2302](https://github.com/facebook/pyrefly/issues/2302),
 [#2970](https://github.com/facebook/pyrefly/issues/2970)) — a server left
 running for days can climb from a few hundred MB to multiple GB. The shim
-polls the server's RSS every 30 seconds and kills it when it crosses
-**750 MiB** (default). Claude Code respawns the server and re-initializes on
-the next LSP request, so the only cost is a fresh index.
+polls the server every 15 minutes and kills it when it crosses **750 MiB**
+(default), or when it has done no work for **24 hours**. Claude Code
+respawns the server and re-initializes on the next LSP request, so the only
+cost is a fresh index.
+
+Idle detection uses the server's accumulated CPU time as a proxy: the shim
+does not sit in the stdio stream, but a server nobody queries burns no CPU,
+so an unchanged CPU counter across polls means the server is unused.
 
 The shim cannot restart pyrefly itself — the LSP client owns the
 `initialize` handshake — which is why it exits and lets the client respawn.
@@ -66,8 +71,9 @@ Tune via environment variables:
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `PYREFLY_LSP_MAX_RSS_KB` | `768000` (750 MiB) | RSS cap in KB; `0` disables the cap entirely |
-| `PYREFLY_LSP_POLL_SECS` | `30` | Seconds between RSS checks |
+| `PYREFLY_LSP_MAX_RSS_KB` | `768000` (750 MiB) | RSS cap in KB; `0` disables the cap |
+| `PYREFLY_LSP_POLL_SECS` | `900` (15 min) | Seconds between checks |
+| `PYREFLY_LSP_IDLE_SECS` | `86400` (24 h) | Kill after this long with no CPU activity; `0` disables |
 
 When the cap fires, the shim logs one line to stderr
 (`pyrefly-lsp: RSS ...KB exceeded cap ...KB`), visible in Claude Code's LSP
